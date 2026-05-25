@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NFCかんたん処理システム</title>
+  <title>NFC連続処理システム</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
     body { background-color: #f0f2f5; font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; }
@@ -16,8 +16,6 @@
 <body class="p-3">
   <div class="card p-3 shadow-sm mx-auto" style="max-width: 500px; border-radius: 1rem; border: none;">
     <h4 class="fw-bold text-primary mb-3 text-center">📱 NFC連続処理モード</h4>
-    
-    <input type="hidden" id="gasUrl" value="https://script.google.com/macros/s/AKfycbzCuPCFtd2i0oPjMOzKcYLjMGWLVxT9sVatuRlaJ2PgIPbSd2Xtw1k6PJGGvb5qTfb8TQ/exec">
     
     <div class="mb-3">
       <label class="form-label fw-bold text-secondary small">1. 処理内容を選択</label>
@@ -50,22 +48,32 @@
   </div>
 
   <script>
+    // =========================================================================
+    // ★ 必須設定：ここに【Step 1】で取得したGASのURL（/execで終わるもの）を貼り付けます
+    // =========================================================================
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzCuPCFtd2i0oPjMOzKcYLjMGWLVxT9sVatuRlaJ2PgIPbSd2Xtw1k6PJGGvb5qTfb8TQ/exec";
+    // =========================================================================
+
     let ndef = null;
     let scanAbortController = null;
     let processedCount = 0;
 
-    async function startNfcScan() {
+    // ページ読み込み時に自動で実行される初期チェック
+    window.addEventListener('DOMContentLoaded', () => {
+      // GASのURLが初期値のままであれば警告
+      if (GAS_API_URL.includes("あなたのGASのID")) {
+        addLog("設定エラー", "⚠️ コード内の「GAS_API_URL」が未設定です。お持ちのGASのURLに書き換えてアップロードし直してください。", "error");
+        document.getElementById('startBtn').disabled = true;
+      }
+      // ブラウザのNFC対応チェック
       if (!('NDEFReader' in window)) {
-        alert("❌ このブラウザはNFCに対応していません。AndroidのGoogle Chromeをご利用ください。");
-        return;
+        addLog("環境エラー", "❌ このブラウザ・端末はNFC機能に対応していないか、https接続されていません。AndroidのGoogle Chromeで開き直してください。", "error");
+        document.getElementById('startBtn').disabled = true;
       }
+    });
 
-      const gasUrl = document.getElementById('gasUrl').value;
-      if (gasUrl.includes("あなたのGASのID")) {
-        alert("⚠️ プログラム内の「gasUrl」が初期設定のままです。GASのデプロイURLに書き換えてください。");
-        return;
-      }
-
+    // スキャン開始
+    async function startNfcScan() {
       try {
         ndef = new NDEFReader();
         scanAbortController = new AbortController();
@@ -77,19 +85,17 @@
         document.getElementById('statusArea').style.display = 'block';
         document.getElementById('processMode').disabled = true;
         
-        // タグを感知した時の処理
+        // タグ検知時のイベント設定
         ndef.onreading = event => {
-          if (navigator.vibrate) navigator.vibrate([100, 50, 100]); // ブルッと震える
+          if (navigator.vibrate) navigator.vibrate([100, 50, 100]); // 振動
           
-          const serialNumber = event.serialNumber; // 例: 04:a1:b2:c3...
+          const serialNumber = event.serialNumber;
           const currentMode = document.getElementById('processMode').value;
           
           if (currentMode === "check") {
-            // モード：ID確認（マスタ登録用）
             addLog(serialNumber, "⏳ マスタ登録状況を確認中...", "info");
             checkNfcToGas(serialNumber);
           } else {
-            // モード：受付・配送完了
             addLog(serialNumber, `⏳ ${currentMode} 処理中...`, "info");
             sendUpdateToGas(serialNumber, currentMode);
           }
@@ -97,14 +103,15 @@
         
         ndef.onreadingerror = () => {
           if (navigator.vibrate) navigator.vibrate(200);
-          addLog("読取エラー", "❌ タグをもう一度かざしてください", "error");
+          addLog("読取エラー", "❌ タグを正しく読み取れませんでした。もう一度かざしてください。", "error");
         };
 
       } catch (error) {
-        alert("NFCの起動に失敗しました: " + error);
+        addLog("NFC起動エラー", "起動に失敗しました: " + error, "error");
       }
     }
 
+    // スキャン停止
     function stopNfcScan() {
       if (scanAbortController) scanAbortController.abort(); 
       document.getElementById('startBtn').style.display = 'block';
@@ -113,18 +120,35 @@
       document.getElementById('processMode').disabled = false;
     }
 
-    // GASへデータ送信（ステータス更新）
+    // GASへ送信（ステータス更新）
     function sendUpdateToGas(nfcId, mode) {
       const payload = { action: "updateStatus", id: nfcId, status: mode, staff: "NFCアプリ" };
-      fetchGasApi(payload, nfcId, mode);
+      
+      fetch(GAS_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain" },
+        body: JSON.stringify(payload)
+      })
+      .then(res => res.json())
+      .then(data => {
+        if(data.success) {
+          updateLog(nfcId, `✅ ${mode}完了`, "success", false);
+          processedCount++;
+          document.getElementById('count').innerText = processedCount;
+        } else {
+          updateLog(nfcId, `❌ エラー: ${data.message}`, "error", false);
+        }
+      })
+      .catch(err => {
+        updateLog(nfcId, `❌ 通信エラー（電波状況を確認してください）`, "error", false);
+      });
     }
 
-    // GASへデータ送信（ID確認）
+    // GASへ送信（IDチェック）
     function checkNfcToGas(nfcId) {
       const payload = { action: "checkNfc", id: nfcId };
-      const gasUrl = document.getElementById('gasUrl').value;
 
-      fetch(gasUrl, {
+      fetch(GAS_API_URL, {
         method: "POST",
         headers: { "Content-Type": "text/plain" },
         body: JSON.stringify(payload)
@@ -142,36 +166,13 @@
       });
     }
 
-    // 共通のFetch処理（更新用）
-    function fetchGasApi(payload, nfcId, mode) {
-      const gasUrl = document.getElementById('gasUrl').value;
-      fetch(gasUrl, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain" },
-        body: JSON.stringify(payload)
-      })
-      .then(res => res.json())
-      .then(data => {
-        if(data.success) {
-          updateLog(nfcId, `✅ ${mode}完了`, "success", false);
-          processedCount++;
-          document.getElementById('count').innerText = processedCount;
-        } else {
-          updateLog(nfcId, `❌ エラー: ${data.message}`, "error", false);
-        }
-      })
-      .catch(err => {
-        updateLog(nfcId, `❌ 通信エラー（再試行してください）`, "error", false);
-      });
-    }
-
-    // 画面にログ行を追加
+    // 画面にログ行を追加する関数
     function addLog(id, msg, type) {
-      document.getElementById('emptyLog').style.display = 'none';
-      const logArea = document.getElementById('logArea');
+      const emptyLog = document.getElementById('emptyLog');
+      if (emptyLog) emptyLog.style.display = 'none';
       
+      const logArea = document.getElementById('logArea');
       const div = document.createElement('div');
-      // ID内のコロンなどを除去してHTMLのIDに使えるようにする
       const safeId = id.replace(/[^a-zA-Z0-9]/g, ''); 
       div.id = "log-" + safeId;
       div.className = `log-entry ${type}`;
@@ -185,7 +186,7 @@
       logArea.prepend(div);
     }
 
-    // ログのステータスを更新（通信完了時）
+    // ログの内容を書き換える関数
     function updateLog(id, msg, type, showCopyBtn) {
       const safeId = id.replace(/[^a-zA-Z0-9]/g, '');
       const logEl = document.getElementById("log-" + safeId);
@@ -193,8 +194,7 @@
         logEl.className = `log-entry ${type}`;
         logEl.querySelector('.result-text').innerText = msg;
         
-        // ID確認モード時はコピーボタンを表示
-        if (showCopyBtn) {
+        if (showCopyBtn && !logEl.querySelector('button')) {
           const btn = document.createElement('button');
           btn.className = "btn btn-sm btn-outline-primary mt-2 py-0";
           btn.innerText = "IDをコピー";
