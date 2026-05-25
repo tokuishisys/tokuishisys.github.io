@@ -13,9 +13,10 @@
     .btn { display: block; border: none; border-radius: 8px; padding: 18px; font-size: 1.2rem; font-weight: bold; cursor: pointer; color: white; margin-bottom: 15px; width: 100%; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
     .btn-primary { background-color: #0d6efd; }
     .btn-danger { background-color: #dc3545; }
+    .btn-success { background-color: #198754; }
     .form-control, .form-select { width: 100%; padding: 14px; font-size: 1.1rem; border-radius: 8px; border: 2px solid #ccc; margin-bottom: 15px; box-sizing: border-box; }
     .form-select { border-color: #0d6efd; background-color: #f8f9fa; }
-    .log-area { border: 1px solid #dee2e6; background-color: #f8f9fa; padding: 10px; border-radius: 8px; height: 350px; overflow-y: auto; }
+    .log-area { border: 1px solid #dee2e6; background-color: #f8f9fa; padding: 10px; border-radius: 8px; overflow-y: auto; }
     .log-entry { font-size: 0.9rem; margin-bottom: 8px; padding: 12px; border-radius: 8px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-left: 4px solid #ccc; text-align: left; }
     .log-entry.success { border-left-color: #198754; }
     .log-entry.error { border-left-color: #dc3545; }
@@ -25,6 +26,11 @@
     .status-box { text-align: center; padding: 15px; border-radius: 8px; background-color: #e7f1ff; border: 1px solid #b6d4fe; color: #084298; font-weight: bold; margin-bottom: 15px; }
     .input-label { text-align: left; margin-bottom: 5px; color: #555; font-size: 0.9rem; font-weight: bold; }
     .highlight-text { color: #0d6efd; font-weight: bold; }
+
+    /* ★ 追加：スキャンリスト用のスタイル */
+    .scan-item { display: flex; justify-content: space-between; align-items: center; padding: 12px; background: #fff; border: 1px solid #ccc; border-radius: 8px; margin-bottom: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+    .scan-item-info { text-align: left; font-size: 0.9rem; }
+    .scan-item-remove { color: #dc3545; background: #ffebee; border: none; font-size: 1.2rem; font-weight: bold; cursor: pointer; border-radius: 50%; width: 35px; height: 35px; display: flex; justify-content: center; align-items: center; }
   </style>
 </head>
 <body>
@@ -57,12 +63,23 @@
       タグを連続でかざしてください...
     </div>
 
-    <div class="d-flex mb-3 mt-3" style="margin-bottom: 10px;">
-      <span class="fw-bold" style="color:#555;">処理ログ</span>
-      <span class="badge"><span id="count">0</span>件 処理</span>
+    <button id="submitBtn" onclick="submitScannedItems()" class="btn btn-success mt-3" style="display:none;">📤 スキャンデータを確定して送信</button>
+
+    <div id="scanListContainer" style="display:none; margin-top:15px;">
+      <div class="d-flex mb-2">
+        <span class="fw-bold" style="color:#dc3545;">ストック中（未送信）</span>
+        <span class="badge" style="background:#dc3545;"><span id="scanCount">0</span>件</span>
+      </div>
+      <div id="scanListArea" class="log-area" style="height: 180px; border-color: #dc3545; background-color: #fff5f5;">
+        </div>
     </div>
-    <div id="logArea" class="log-area">
-      <div id="emptyLog" style="color:#999; font-size:0.9rem; padding-top:40px; text-align:center;">ボタンを押すと起動します</div>
+
+    <div class="d-flex mb-2 mt-4">
+      <span class="fw-bold" style="color:#555;">送信結果ログ</span>
+      <span class="badge"><span id="count">0</span>件 完了</span>
+    </div>
+    <div id="logArea" class="log-area" style="height: 250px;">
+      <div id="emptyLog" style="color:#999; font-size:0.9rem; padding-top:40px; text-align:center;">送信結果がここに追加されます</div>
     </div>
   </div>
 
@@ -76,19 +93,18 @@
     let ndef = null;
     let scanAbortController = null;
     let processedCount = 0;
+    
+    // ★ 追加：スキャンしたデータを一時保存する配列
+    let scannedItems = [];
 
-    // 画面ロード時の初期化処理
     window.addEventListener('DOMContentLoaded', () => {
-      // スタッフ名の復元
       const savedStaff = localStorage.getItem('nfc_staff_name');
       if (savedStaff) document.getElementById('staffName').value = savedStaff;
 
-      // モード切り替え時に「参照便」の表示/非表示を切り替える
       document.getElementById('processMode').addEventListener('change', (e) => {
         document.getElementById('routeArea').style.display = (e.target.value === "受付") ? "block" : "none";
       });
 
-      // GASからルート区分のヘッダーを取得する
       fetch(GAS_API_URL, {
         method: "POST",
         headers: { "Content-Type": "text/plain" },
@@ -102,7 +118,6 @@
           data.routeHeaders.forEach(h => {
             if (h) select.innerHTML += `<option value="${h}">${h}</option>`;
           });
-          // PC版と同じく14時以降なら2番目（午後便）をデフォルト選択
           if (new Date().getHours() >= 14 && data.routeHeaders.length > 1) {
             select.selectedIndex = 1;
           }
@@ -115,7 +130,6 @@
       if (!staffName) { alert("担当スタッフ名を入力してください！"); return; }
       localStorage.setItem('nfc_staff_name', staffName);
 
-      if (GAS_API_URL.includes("あなたのGASのID")) { alert("GASのURLを設定してください。"); return; }
       if (!('NDEFReader' in window)) { alert("❌ NFC機能が起動できません。"); return; }
 
       try {
@@ -129,7 +143,6 @@
         document.getElementById('processMode').disabled = true;
         document.getElementById('staffName').disabled = true;
         document.getElementById('routeSlot').disabled = true;
-        document.getElementById('emptyLog').style.display = 'none';
         
         ndef.onreading = event => {
           if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
@@ -139,16 +152,28 @@
           const staff = document.getElementById('staffName').value;
           const slot = document.getElementById('routeSlot').value;
           
-          addLog(serialNumber, `⏳ ${currentMode} 処理中...`, "info");
-
-          let actionType = "updateStatus";
-          if (currentMode === "check") actionType = "checkNfc";
-          if (currentMode === "登録") actionType = "registerNfc";
-
-          executeGasApi(actionType, serialNumber, currentMode, staff, slot);
+          if (currentMode === "check") {
+            // ★ 「ID確認」モードだけは、今まで通り即時送信して結果を表示する
+            addLog(serialNumber, `⏳ 確認中...`, "info");
+            executeGasApi("checkNfc", serialNumber, currentMode, staff, slot);
+          } else {
+            // ★ それ以外のモードは重複チェックをしてリストにストックする
+            if (scannedItems.some(item => item.id === serialNumber)) {
+              alert("⚠️ 注意: このタグは既に読み込み済みです。\nID: " + serialNumber);
+              return;
+            }
+            
+            scannedItems.push({
+              id: serialNumber,
+              mode: currentMode,
+              staff: staff,
+              slot: slot
+            });
+            renderScanList();
+          }
         };
         
-        ndef.onreadingerror = () => addLog("エラー", "❌ 読み取りに失敗。もう一度かざしてください。", "error");
+        ndef.onreadingerror = () => alert("❌ 読み取りに失敗しました。もう一度かざしてください。");
 
       } catch (error) { alert("NFCの起動に失敗しました: " + error); }
     }
@@ -163,10 +188,127 @@
       document.getElementById('routeSlot').disabled = false;
     }
 
-    // GAS通信
-    function executeGasApi(actionType, nfcId, mode, staff, slot) {
-      const payload = { action: actionType, id: nfcId, status: mode, staff: staff, slot: slot };
+    // ==========================================
+    // ★ 追加：ストック機能と一括送信のロジック
+    // ==========================================
 
+    // リストの画面を描画する
+    function renderScanList() {
+      const container = document.getElementById('scanListContainer');
+      const area = document.getElementById('scanListArea');
+      const submitBtn = document.getElementById('submitBtn');
+      
+      area.innerHTML = "";
+      
+      if (scannedItems.length === 0) {
+        container.style.display = "none";
+        submitBtn.style.display = "none";
+        return;
+      }
+      
+      container.style.display = "block";
+      submitBtn.style.display = "block";
+      document.getElementById('scanCount').innerText = scannedItems.length;
+      
+      scannedItems.forEach((item, index) => {
+        let modeLabel = item.mode;
+        if (item.mode === "受付" && item.slot) modeLabel += ` [${item.slot}]`;
+        
+        const div = document.createElement('div');
+        div.className = "scan-item";
+        div.innerHTML = `
+          <div class="scan-item-info">
+            <strong style="color:#333;">ID: ${item.id}</strong><br>
+            <span style="color:#0d6efd; font-weight:bold;">処理: ${modeLabel}</span>
+          </div>
+          <button class="scan-item-remove" onclick="removeScannedItem(${index})">✖</button>
+        `;
+        area.prepend(div); // 新しいものほど上に表示
+      });
+    }
+
+    // リストから削除する（✖ボタン）
+    function removeScannedItem(index) {
+      scannedItems.splice(index, 1);
+      renderScanList();
+    }
+
+    // 確定して送信する
+    async function submitScannedItems() {
+      if (scannedItems.length === 0) return;
+      
+      const submitBtn = document.getElementById('submitBtn');
+      submitBtn.disabled = true;
+      submitBtn.innerText = "📤 データ送信中... しばらくお待ちください";
+      document.getElementById('emptyLog').style.display = 'none';
+      
+      // 送信リストをコピーして、1件ずつGASへ送る
+      let itemsToProcess = [...scannedItems];
+      
+      for (let i = 0; i < itemsToProcess.length; i++) {
+        const item = itemsToProcess[i];
+        let actionType = "updateStatus";
+        if (item.mode === "登録") actionType = "registerNfc";
+        
+        addLog(item.id, `⏳ サーバーへ送信中...`, "info");
+        
+        // 順番にGASへ送信
+        await sendSingleRequest(actionType, item);
+      }
+      
+      submitBtn.disabled = false;
+      submitBtn.innerText = "📤 スキャンデータを確定して送信";
+      renderScanList();
+    }
+
+    // 1件ずつ通信を行う処理
+    function sendSingleRequest(actionType, item) {
+      return new Promise((resolve) => {
+        const payload = { action: actionType, id: item.id, status: item.mode, staff: item.staff, slot: item.slot };
+
+        fetch(GAS_API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain" },
+          body: JSON.stringify(payload)
+        })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            // ★成功した場合のみ、ストックリストからそのデータを削除する
+            scannedItems = scannedItems.filter(i => i.id !== item.id);
+            
+            let resultMsg = `✅ ${item.mode}完了`;
+            if (item.mode === "受付" && data.receiver) {
+              let memoHtml = data.routeMemo ? `<div style="color:#dc3545; font-size:0.8rem; margin-top:4px;">⚠️ 備考: ${data.routeMemo}</div>` : "";
+              resultMsg = `
+                ✅ 受付完了
+                🏥 配送先: <span class="highlight-text">${data.receiver}</span>
+                🚚 ルート: <span class="highlight-text">${data.routeCat || ''} [${data.routeName || ''}]</span>
+                ${memoHtml}
+              `;
+            }
+            updateLog(item.id, resultMsg, "success", false);
+            processedCount++;
+            document.getElementById('count').innerText = processedCount;
+          } else {
+            // エラーの場合はリストに残し、ログにもエラーを出す
+            updateLog(item.id, `❌ エラー: ${data.message}`, "error", false);
+          }
+          resolve();
+        })
+        .catch(() => {
+          updateLog(item.id, `❌ 通信エラー`, "error", false);
+          resolve();
+        });
+      });
+    }
+
+    // ==========================================
+    // 既存の即時動作用・ログ用関数
+    // ==========================================
+    function executeGasApi(actionType, nfcId, mode, staff, slot) {
+      document.getElementById('emptyLog').style.display = 'none';
+      const payload = { action: actionType, id: nfcId, status: mode, staff: staff, slot: slot };
       fetch(GAS_API_URL, {
         method: "POST",
         headers: { "Content-Type": "text/plain" },
@@ -175,28 +317,14 @@
       .then(res => res.json())
       .then(data => {
         if (data.success) {
-          if (actionType === "updateStatus" && mode === "受付") {
-            // 備考がある場合は表示用のテキストを作成
-            let memoHtml = data.routeMemo ? `<div style="color:#dc3545; font-size:0.8rem; margin-top:4px;">⚠️ 備考: ${data.routeMemo}</div>` : "";
-            
-            let resultMsg = `
-              ✅ 受付完了
-              🏥 配送先: <span class="highlight-text">${data.receiver}</span>
-              🚚 ルート: <span class="highlight-text">${data.routeCat} [${data.routeName}]</span>
-              ${memoHtml}
-            `;
-            updateLog(nfcId, resultMsg, "success", false);
-          } else {
-            // 登録や配送完了などの場合
-            updateLog(nfcId, `✅ ${mode}完了`, "success", false);
+          if (actionType === "checkNfc") {
+            if (data.isRegistered) updateLog(nfcId, `✅ 登録済: 【${data.bagName}】\n送: ${data.sender} ➔ 受: ${data.receiver}`, "success", true);
+            else updateLog(nfcId, `⚠️ 未登録\nこのIDをマスタに登録してください。`, "error", true);
           }
-          processedCount++;
-          document.getElementById('count').innerText = processedCount;
         } else {
           updateLog(nfcId, `❌ エラー: ${data.message}`, "error", false);
         }
-      })
-      .catch(() => updateLog(nfcId, `❌ 通信エラー`, "error", false));
+      }).catch(() => updateLog(nfcId, `❌ 通信エラー`, "error", false));
     }
 
     function addLog(id, msg, type) {
@@ -214,7 +342,7 @@
       const logEl = document.getElementById("log-" + safeId);
       if (logEl) {
         logEl.className = `log-entry ${type}`;
-        logEl.querySelector('.result-text').innerHTML = msg; // innerHTMLに変更（装飾タグ対応）
+        logEl.querySelector('.result-text').innerHTML = msg;
         
         if (showCopyBtn && !logEl.querySelector('button')) {
           const btn = document.createElement('button');
