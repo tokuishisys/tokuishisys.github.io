@@ -144,32 +144,47 @@
         document.getElementById('staffName').disabled = true;
         document.getElementById('routeSlot').disabled = true;
         
-        ndef.onreading = event => {
+        ndef.onreading = async event => {
           if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
           
           const serialNumber = event.serialNumber;
           const currentMode = document.getElementById('processMode').value;
-          const staff = document.getElementById('staffName').value;
-          const slot = document.getElementById('routeSlot').value;
           
-          if (currentMode === "check") {
-            // ★ 「ID確認」モードだけは、今まで通り即時送信して結果を表示する
-            addLog(serialNumber, `⏳ 確認中...`, "info");
-            executeGasApi("checkNfc", serialNumber, currentMode, staff, slot);
-          } else {
-            // ★ それ以外のモードは重複チェックをしてリストにストックする
-            if (scannedItems.some(item => item.id === serialNumber)) {
-              alert("⚠️ 注意: このタグは既に読み込み済みです。\nID: " + serialNumber);
-              return;
-            }
-            
+          // 既にリストにある場合は重複を弾く
+          if (scannedItems.some(item => item.id === serialNumber)) {
+            alert("⚠️ このタグは既に読み込み済みです。");
+            return;
+          }
+
+          // 1. スキャンした瞬間に情報を取得（モードに関わらずマスタ情報を確認）
+          addLog(serialNumber, `🔍 情報を確認中...`, "info");
+          
+          try {
+            const response = await fetch(GAS_API_URL, {
+              method: "POST",
+              headers: { "Content-Type": "text/plain" },
+              body: JSON.stringify({ action: "checkNfc", id: serialNumber })
+            });
+            const data = await response.json();
+
+            // 2. 取得した情報を使ってリストに追加
+            const info = data.success ? data.bagName : "未登録タグ";
+            const receiver = data.success ? data.receiver : "---";
+
             scannedItems.push({
               id: serialNumber,
               mode: currentMode,
-              staff: staff,
-              slot: slot
+              staff: document.getElementById('staffName').value,
+              slot: document.getElementById('routeSlot').value,
+              displayName: info, // 取得した名称
+              receiver: receiver // 取得した配送先
             });
+            
             renderScanList();
+            updateLog(serialNumber, `✅ 読み込み完了: ${info} (${receiver})`, "success", false);
+
+          } catch (err) {
+            updateLog(serialNumber, `❌ 通信エラー: マスタ確認失敗`, "error", false);
           }
         };
         
@@ -196,37 +211,32 @@
     function renderScanList() {
       const container = document.getElementById('scanListContainer');
       const area = document.getElementById('scanListArea');
-      const submitBtn = document.getElementById('submitBtn');
       
       area.innerHTML = "";
-      
       if (scannedItems.length === 0) {
         container.style.display = "none";
-        submitBtn.style.display = "none";
+        document.getElementById('submitBtn').style.display = "none";
         return;
       }
       
       container.style.display = "block";
-      submitBtn.style.display = "block";
+      document.getElementById('submitBtn').style.display = "block";
       document.getElementById('scanCount').innerText = scannedItems.length;
       
       scannedItems.forEach((item, index) => {
-        let modeLabel = item.mode;
-        if (item.mode === "受付" && item.slot) modeLabel += ` [${item.slot}]`;
-        
         const div = document.createElement('div');
         div.className = "scan-item";
         div.innerHTML = `
           <div class="scan-item-info">
-            <strong style="color:#333;">ID: ${item.id}</strong><br>
-            <span style="color:#0d6efd; font-weight:bold;">処理: ${modeLabel}</span>
+            <strong>${item.displayName}</strong><br>
+            <span style="font-size:0.8rem;">先: ${item.receiver} | ID: ${item.id}</span><br>
+            <span style="color:#0d6efd; font-weight:bold;">処理: ${item.mode}</span>
           </div>
           <button class="scan-item-remove" onclick="removeScannedItem(${index})">✖</button>
         `;
-        area.prepend(div); // 新しいものほど上に表示
+        area.prepend(div);
       });
     }
-
     // リストから削除する（✖ボタン）
     function removeScannedItem(index) {
       scannedItems.splice(index, 1);
