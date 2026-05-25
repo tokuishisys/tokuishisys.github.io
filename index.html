@@ -174,25 +174,26 @@
       })
       .then(res => res.json())
       .then(data => {
-        if (actionType === "checkNfc") {
-          if (data.isRegistered) updateLog(nfcId, `✅ 登録済: 【${data.bagName}】\n送: ${data.sender} ➔ 受: ${data.receiver}`, "success", true);
-          else updateLog(nfcId, `⚠️ 未登録\nこのIDをマスタに登録してください。`, "error", true);
-        
-        } else {
-          // 登録・受付・配送の結果
-          if(data.success) {
-            let resultMsg = `✅ ${mode}完了`;
-            // 受付処理の場合は、割り当てられたルートと配送先をリッチに表示
-            if (mode === "受付" && data.receiver) {
-              resultMsg = `✅ 受付完了\n🏥 配送先: <span class="highlight-text">${data.receiver}</span>\n🚚 ルート: <span class="highlight-text">${data.routeCat || '未定'} [${data.routeName || 'センター搬送'}]</span>`;
-            }
-
+        if (data.success) {
+          if (actionType === "updateStatus" && mode === "受付") {
+            // 備考がある場合は表示用のテキストを作成
+            let memoHtml = data.routeMemo ? `<div style="color:#dc3545; font-size:0.8rem; margin-top:4px;">⚠️ 備考: ${data.routeMemo}</div>` : "";
+            
+            let resultMsg = `
+              ✅ 受付完了
+              🏥 配送先: <span class="highlight-text">${data.receiver}</span>
+              🚚 ルート: <span class="highlight-text">${data.routeCat} [${data.routeName}]</span>
+              ${memoHtml}
+            `;
             updateLog(nfcId, resultMsg, "success", false);
-            processedCount++;
-            document.getElementById('count').innerText = processedCount;
           } else {
-            updateLog(nfcId, `❌ エラー: ${data.message}`, "error", false);
+            // 登録や配送完了などの場合
+            updateLog(nfcId, `✅ ${mode}完了`, "success", false);
           }
+          processedCount++;
+          document.getElementById('count').innerText = processedCount;
+        } else {
+          updateLog(nfcId, `❌ エラー: ${data.message}`, "error", false);
         }
       })
       .catch(() => updateLog(nfcId, `❌ 通信エラー`, "error", false));
