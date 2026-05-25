@@ -278,24 +278,21 @@
         .then(res => res.json())
         .then(data => {
           if (data.success) {
-            // ★成功した場合のみ、ストックリストからそのデータを削除する
             scannedItems = scannedItems.filter(i => i.id !== item.id);
             
-            let resultMsg = `✅ ${item.mode}完了`;
-            if (item.mode === "受付" && data.receiver) {
-              let memoHtml = data.routeMemo ? `<div style="color:#dc3545; font-size:0.8rem; margin-top:4px;">⚠️ 備考: ${data.routeMemo}</div>` : "";
-              resultMsg = `
-                ✅ 受付完了
-                🏥 配送先: <span class="highlight-text">${data.receiver}</span>
-                🚚 ルート: <span class="highlight-text">${data.routeCat || ''} [${data.routeName || ''}]</span>
-                ${memoHtml}
-              `;
+            // ログ内容を統一して詳細を表示
+            let resultMsg = `✅ ${item.mode}完了<br>
+                             🏥 配送先: <span class="highlight-text">${data.receiver || '---'}</span><br>
+                             🚚 袋情報: <span class="highlight-text">${data.bagName || '---'}</span>`;
+            
+            if (data.routeMemo) {
+               resultMsg += `<div style="color:#dc3545; font-size:0.8rem; margin-top:4px;">⚠️ 備考: ${data.routeMemo}</div>`;
             }
+            
             updateLog(item.id, resultMsg, "success", false);
             processedCount++;
             document.getElementById('count').innerText = processedCount;
           } else {
-            // エラーの場合はリストに残し、ログにもエラーを出す
             updateLog(item.id, `❌ エラー: ${data.message}`, "error", false);
           }
           resolve();
@@ -344,22 +341,28 @@
     function updateLog(id, msg, type, showCopyBtn) {
       const safeId = id.replace(/[^a-zA-Z0-9]/g, '');
       const logEl = document.getElementById("log-" + safeId);
-      if (logEl) {
-        logEl.className = `log-entry ${type}`;
-        logEl.querySelector('.result-text').innerHTML = msg;
-        
-        if (showCopyBtn && !logEl.querySelector('button')) {
-          const btn = document.createElement('button');
-          btn.style.cssText = "margin-top:8px; padding:4px 12px; background:#0d6efd; color:white; border:none; border-radius:4px; font-size:0.8rem; cursor:pointer;";
-          btn.innerText = "IDをコピー";
-          btn.onclick = () => {
-            navigator.clipboard.writeText(id).then(() => {
-              btn.innerText = "コピー完了！";
-              btn.style.background = "#198754";
-            });
-          };
-          logEl.appendChild(btn);
-        }
+      
+      // ログ要素が存在しない場合は新規作成（addLogを呼ぶ）
+      if (!logEl) {
+        addLog(id, msg, type);
+      }
+      
+      const targetEl = document.getElementById("log-" + safeId);
+      targetEl.className = `log-entry ${type}`;
+      targetEl.querySelector('.result-text').innerHTML = msg;
+      
+      // コピーボタンの追加（ボタンがまだない場合のみ）
+      if (!targetEl.querySelector('button')) {
+        const btn = document.createElement('button');
+        btn.style.cssText = "margin-top:8px; padding:4px 12px; background:#0d6efd; color:white; border:none; border-radius:4px; font-size:0.8rem; cursor:pointer;";
+        btn.innerText = "IDをコピー";
+        btn.onclick = () => {
+          navigator.clipboard.writeText(id).then(() => {
+            btn.innerText = "コピー完了！";
+            btn.style.background = "#198754";
+          });
+        };
+        targetEl.appendChild(btn);
       }
     }
   </script>
