@@ -144,40 +144,32 @@
         document.getElementById('staffName').disabled = true;
         document.getElementById('routeSlot').disabled = true;
         
-        ndef.onreading = async event => {
+        ndef.onreading = event => {
           if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
           
           const serialNumber = event.serialNumber;
           const currentMode = document.getElementById('processMode').value;
+          const staff = document.getElementById('staffName').value;
+          const slot = document.getElementById('routeSlot').value;
           
-          // 重複チェック
-          if (scannedItems.some(item => item.id === serialNumber)) {
-            alert("⚠️ このタグは既にリストに入っています。");
-            return;
-          }
-
-          // 情報を即座に取得してリストに追加
-          try {
-            const response = await fetch(GAS_API_URL, {
-              method: "POST",
-              headers: { "Content-Type": "text/plain" },
-              body: JSON.stringify({ action: "checkNfc", id: serialNumber })
-            });
-            const data = await response.json();
-
-            // 成功した場合はマスタの情報を、失敗した場合はIDのみを表示
+          if (currentMode === "check") {
+            // ★ 「ID確認」モードだけは、今まで通り即時送信して結果を表示する
+            addLog(serialNumber, `⏳ 確認中...`, "info");
+            executeGasApi("checkNfc", serialNumber, currentMode, staff, slot);
+          } else {
+            // ★ それ以外のモードは重複チェックをしてリストにストックする
+            if (scannedItems.some(item => item.id === serialNumber)) {
+              alert("⚠️ 注意: このタグは既に読み込み済みです。\nID: " + serialNumber);
+              return;
+            }
+            
             scannedItems.push({
               id: serialNumber,
               mode: currentMode,
-              staff: document.getElementById('staffName').value,
-              slot: document.getElementById('routeSlot').value,
-              displayName: data.success ? data.bagName : "未登録ID",
-              receiver: data.success ? data.receiver : "情報なし"
+              staff: staff,
+              slot: slot
             });
-            
             renderScanList();
-          } catch (err) {
-            console.error("情報取得失敗", err);
           }
         };
         
@@ -204,33 +196,37 @@
     function renderScanList() {
       const container = document.getElementById('scanListContainer');
       const area = document.getElementById('scanListArea');
+      const submitBtn = document.getElementById('submitBtn');
       
       area.innerHTML = "";
+      
       if (scannedItems.length === 0) {
         container.style.display = "none";
-        document.getElementById('submitBtn').style.display = "none";
+        submitBtn.style.display = "none";
         return;
       }
       
       container.style.display = "block";
-      document.getElementById('submitBtn').style.display = "block";
+      submitBtn.style.display = "block";
       document.getElementById('scanCount').innerText = scannedItems.length;
       
       scannedItems.forEach((item, index) => {
+        let modeLabel = item.mode;
+        if (item.mode === "受付" && item.slot) modeLabel += ` [${item.slot}]`;
+        
         const div = document.createElement('div');
         div.className = "scan-item";
-        // ここで配送先などの情報を表示します
         div.innerHTML = `
           <div class="scan-item-info">
-            <strong style="font-size: 1.1rem;">${item.displayName}</strong><br>
-            <span style="color:#666;">配送先: ${item.receiver}</span><br>
-            <span style="color:#0d6efd; font-weight:bold;">処理: ${item.mode}</span>
+            <strong style="color:#333;">ID: ${item.id}</strong><br>
+            <span style="color:#0d6efd; font-weight:bold;">処理: ${modeLabel}</span>
           </div>
           <button class="scan-item-remove" onclick="removeScannedItem(${index})">✖</button>
         `;
-        area.prepend(div);
+        area.prepend(div); // 新しいものほど上に表示
       });
     }
+
     // リストから削除する（✖ボタン）
     function removeScannedItem(index) {
       scannedItems.splice(index, 1);
@@ -278,21 +274,24 @@
         .then(res => res.json())
         .then(data => {
           if (data.success) {
+            // ★成功した場合のみ、ストックリストからそのデータを削除する
             scannedItems = scannedItems.filter(i => i.id !== item.id);
             
-            // ログ内容を統一して詳細を表示
-            let resultMsg = `✅ ${item.mode}完了<br>
-                             🏥 配送先: <span class="highlight-text">${data.receiver || '---'}</span><br>
-                             🚚 袋情報: <span class="highlight-text">${data.bagName || '---'}</span>`;
-            
-            if (data.routeMemo) {
-               resultMsg += `<div style="color:#dc3545; font-size:0.8rem; margin-top:4px;">⚠️ 備考: ${data.routeMemo}</div>`;
+            let resultMsg = `✅ ${item.mode}完了`;
+            if (item.mode === "受付" && data.receiver) {
+              let memoHtml = data.routeMemo ? `<div style="color:#dc3545; font-size:0.8rem; margin-top:4px;">⚠️ 備考: ${data.routeMemo}</div>` : "";
+              resultMsg = `
+                ✅ 受付完了
+                🏥 配送先: <span class="highlight-text">${data.receiver}</span>
+                🚚 ルート: <span class="highlight-text">${data.routeCat || ''} [${data.routeName || ''}]</span>
+                ${memoHtml}
+              `;
             }
-            
             updateLog(item.id, resultMsg, "success", false);
             processedCount++;
             document.getElementById('count').innerText = processedCount;
           } else {
+            // エラーの場合はリストに残し、ログにもエラーを出す
             updateLog(item.id, `❌ エラー: ${data.message}`, "error", false);
           }
           resolve();
@@ -341,28 +340,22 @@
     function updateLog(id, msg, type, showCopyBtn) {
       const safeId = id.replace(/[^a-zA-Z0-9]/g, '');
       const logEl = document.getElementById("log-" + safeId);
-      
-      // ログ要素が存在しない場合は新規作成（addLogを呼ぶ）
-      if (!logEl) {
-        addLog(id, msg, type);
-      }
-      
-      const targetEl = document.getElementById("log-" + safeId);
-      targetEl.className = `log-entry ${type}`;
-      targetEl.querySelector('.result-text').innerHTML = msg;
-      
-      // コピーボタンの追加（ボタンがまだない場合のみ）
-      if (!targetEl.querySelector('button')) {
-        const btn = document.createElement('button');
-        btn.style.cssText = "margin-top:8px; padding:4px 12px; background:#0d6efd; color:white; border:none; border-radius:4px; font-size:0.8rem; cursor:pointer;";
-        btn.innerText = "IDをコピー";
-        btn.onclick = () => {
-          navigator.clipboard.writeText(id).then(() => {
-            btn.innerText = "コピー完了！";
-            btn.style.background = "#198754";
-          });
-        };
-        targetEl.appendChild(btn);
+      if (logEl) {
+        logEl.className = `log-entry ${type}`;
+        logEl.querySelector('.result-text').innerHTML = msg;
+        
+        if (showCopyBtn && !logEl.querySelector('button')) {
+          const btn = document.createElement('button');
+          btn.style.cssText = "margin-top:8px; padding:4px 12px; background:#0d6efd; color:white; border:none; border-radius:4px; font-size:0.8rem; cursor:pointer;";
+          btn.innerText = "IDをコピー";
+          btn.onclick = () => {
+            navigator.clipboard.writeText(id).then(() => {
+              btn.innerText = "コピー完了！";
+              btn.style.background = "#198754";
+            });
+          };
+          logEl.appendChild(btn);
+        }
       }
     }
   </script>
