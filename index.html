@@ -6,15 +6,15 @@
   <title>NFC連続処理システム</title>
   <style>
     body { background-color: #f0f2f5; font-family: -apple-system, sans-serif; padding: 15px; margin: 0; }
-    .card { background: #fff; padding: 20px; border-radius: 12px; max-width: 500px; margin: 20px auto; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-align: center; }
+    .card { background: #fff; padding: 20px; border-radius: 12px; max-width: 500px; margin: 0 auto; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-align: center; }
     .fw-bold { font-weight: bold; }
     .text-primary { color: #0d6efd; }
     .mb-3 { margin-bottom: 1rem; }
-    .w-100 { width: 100%; }
     .btn { display: block; border: none; border-radius: 8px; padding: 18px; font-size: 1.2rem; font-weight: bold; cursor: pointer; color: white; margin-bottom: 15px; width: 100%; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
     .btn-primary { background-color: #0d6efd; }
     .btn-danger { background-color: #dc3545; }
-    .form-select { width: 100%; padding: 14px; font-size: 1.1rem; border-radius: 8px; border: 2px solid #0d6efd; margin-bottom: 15px; box-sizing: border-box; }
+    .form-control, .form-select { width: 100%; padding: 14px; font-size: 1.1rem; border-radius: 8px; border: 2px solid #ccc; margin-bottom: 15px; box-sizing: border-box; }
+    .form-select { border-color: #0d6efd; background-color: #f8f9fa; }
     .log-area { border: 1px solid #dee2e6; background-color: #f8f9fa; padding: 10px; border-radius: 8px; height: 250px; overflow-y: auto; }
     .log-entry { font-size: 0.9rem; margin-bottom: 8px; padding: 12px; border-radius: 8px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-left: 4px solid #ccc; text-align: left; }
     .log-entry.success { border-left-color: #198754; }
@@ -22,7 +22,8 @@
     .log-entry.info { border-left-color: #0d6efd; }
     .d-flex { display: flex; justify-content: space-between; align-items: center; }
     .badge { background: #198754; color: white; padding: 4px 10px; border-radius: 4px; font-size: 0.9rem; }
-    .status-box { text-align: center; padding: 15px; mb-3; border-radius: 8px; background-color: #e7f1ff; border: 1px solid #b6d4fe; color: #084298; font-weight: bold; margin-bottom: 15px; }
+    .status-box { text-align: center; padding: 15px; border-radius: 8px; background-color: #e7f1ff; border: 1px solid #b6d4fe; color: #084298; font-weight: bold; margin-bottom: 15px; }
+    .input-label { text-align: left; margin-bottom: 5px; color: #555; font-size: 0.9rem; font-weight: bold; }
   </style>
 </head>
 <body>
@@ -30,15 +31,19 @@
   <div class="card">
     <h3 class="fw-bold text-primary mb-3">📱 NFC連続処理</h3>
     
-    <div style="text-align: left; margin-bottom: 5px;"><small class="fw-bold" style="color:#666;">処理内容を選択</small></div>
+    <div class="input-label">👤 担当スタッフ名</div>
+    <input type="text" id="staffName" class="form-control" placeholder="例：山田 太郎">
+
+    <div class="input-label">⚙️ 処理内容を選択</div>
     <select id="processMode" class="form-select">
+      <option value="登録">🆕 新規登録（集荷）</option>
       <option value="受付">📥 センター受付</option>
       <option value="配送">🏁 配送完了</option>
-      <option value="check">⚙️ ID確認（紐付けマスタ登録用）</option>
+      <option value="check">🔍 ID確認（紐付けマスタ登録用）</option>
     </select>
 
-    <button id="startBtn" onclick="initAndStartNfc()" class="btn btn-primary">▶️ NFCスキャンを開始する</button>
-    <button id="stopBtn" onclick="stopNfcScan()" class="btn btn-danger" style="display:none;">⏹️ スキャンを停止する</button>
+    <button id="startBtn" onclick="initAndStartNfc()" class="btn btn-primary">▶️ NFCスキャンを開始</button>
+    <button id="stopBtn" onclick="stopNfcScan()" class="btn btn-danger" style="display:none;">⏹️ スキャンを停止</button>
 
     <div id="statusArea" class="status-box" style="display:none;">
       タグを連続でかざしてください...
@@ -46,7 +51,7 @@
 
     <div class="d-flex mb-3" style="margin-bottom: 10px;">
       <span class="fw-bold" style="color:#555;">処理ログ</span>
-      <span class="badge"><span id="count">0</span>件 完了</span>
+      <span class="badge"><span id="count">0</span>件 処理</span>
     </div>
     <div id="logArea" class="log-area">
       <div id="emptyLog" style="color:#999; font-size:0.9rem; padding-top:40px;">ボタンを押すと起動します</div>
@@ -64,17 +69,31 @@
     let scanAbortController = null;
     let processedCount = 0;
 
-    // ボタンが押されて初めて起動する関数（画面読み込み時のエラーを回避）
+    // 画面を開いた時に、前回入力したスタッフ名を復元する
+    window.addEventListener('DOMContentLoaded', () => {
+      const savedStaff = localStorage.getItem('nfc_staff_name');
+      if (savedStaff) {
+        document.getElementById('staffName').value = savedStaff;
+      }
+    });
+
     async function initAndStartNfc() {
-      // 1. GAS URLチェック
+      const staffName = document.getElementById('staffName').value.trim();
+      if (!staffName) {
+        alert("担当スタッフ名を入力してください！");
+        return;
+      }
+      
+      // スタッフ名をスマホに保存（次回から入力不要）
+      localStorage.setItem('nfc_staff_name', staffName);
+
       if (GAS_API_URL.includes("あなたのGASのID")) {
         alert("コード内の「GAS_API_URL」を書き換えてください。");
         return;
       }
 
-      // 2. NFC対応チェック（ボタンを押した後に判定）
       if (!('NDEFReader' in window)) {
-        alert("❌ NFC機能が起動できません。\n\n【原因の可能性】\n① AndroidのChrome以外のブラウザで開いている\n② URLの先頭が https:// になっていない");
+        alert("❌ NFC機能が起動できません。\nAndroidのChromeで開き直してください。");
         return;
       }
 
@@ -82,29 +101,31 @@
         ndef = new NDEFReader();
         scanAbortController = new AbortController();
         
-        // スキャン開始
         await ndef.scan({ signal: scanAbortController.signal });
         
-        // UI切り替え
         document.getElementById('startBtn').style.display = 'none';
         document.getElementById('stopBtn').style.display = 'block';
         document.getElementById('statusArea').style.display = 'block';
         document.getElementById('processMode').disabled = true;
+        document.getElementById('staffName').disabled = true;
         document.getElementById('emptyLog').style.display = 'none';
         
-        // 読み取りイベント設定
         ndef.onreading = event => {
           if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
           
           const serialNumber = event.serialNumber;
           const currentMode = document.getElementById('processMode').value;
+          const staff = document.getElementById('staffName').value;
           
           if (currentMode === "check") {
             addLog(serialNumber, "⏳ マスタ確認中...", "info");
-            checkNfcToGas(serialNumber);
+            executeGasApi("checkNfc", serialNumber, currentMode, staff);
+          } else if (currentMode === "登録") {
+            addLog(serialNumber, `⏳ 新規登録中...`, "info");
+            executeGasApi("registerNfc", serialNumber, currentMode, staff);
           } else {
             addLog(serialNumber, `⏳ ${currentMode}処理中...`, "info");
-            sendUpdateToGas(serialNumber, currentMode);
+            executeGasApi("updateStatus", serialNumber, currentMode, staff);
           }
         };
         
@@ -123,39 +144,35 @@
       document.getElementById('stopBtn').style.display = 'none';
       document.getElementById('statusArea').style.display = 'none';
       document.getElementById('processMode').disabled = false;
+      document.getElementById('staffName').disabled = false;
     }
 
-    function sendUpdateToGas(nfcId, mode) {
+    // GAS通信をまとめた関数
+    function executeGasApi(actionType, nfcId, mode, staff) {
+      const payload = { action: actionType, id: nfcId, status: mode, staff: staff };
+
       fetch(GAS_API_URL, {
         method: "POST",
         headers: { "Content-Type": "text/plain" },
-        body: JSON.stringify({ action: "updateStatus", id: nfcId, status: mode })
+        body: JSON.stringify(payload)
       })
       .then(res => res.json())
       .then(data => {
-        if(data.success) {
-          updateLog(nfcId, `✅ ${mode}完了`, "success", false);
-          processedCount++;
-          document.getElementById('count').innerText = processedCount;
+        if (actionType === "checkNfc") {
+          if (data.isRegistered) {
+            updateLog(nfcId, `✅ 登録済: 【${data.bagName}】\n送: ${data.sender} ➔ 受: ${data.receiver}`, "success", true);
+          } else {
+            updateLog(nfcId, `⚠️ 未登録\nこのIDをマスタに登録してください。`, "error", true);
+          }
         } else {
-          updateLog(nfcId, `❌ エラー: ${data.message}`, "error", false);
-        }
-      })
-      .catch(() => updateLog(nfcId, `❌ 通信エラー`, "error", false));
-    }
-
-    function checkNfcToGas(nfcId) {
-      fetch(GAS_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain" },
-        body: JSON.stringify({ action: "checkNfc", id: nfcId })
-      })
-      .then(res => res.json())
-      .then(data => {
-        if (data.isRegistered) {
-          updateLog(nfcId, `✅ 登録済: 【${data.bagName}】\n送: ${data.sender} ➔ 受: ${data.receiver}`, "success", true);
-        } else {
-          updateLog(nfcId, `⚠️ 未登録\nこのIDをマスタに登録してください。`, "error", true);
+          // 登録・受付・配送の結果
+          if(data.success) {
+            updateLog(nfcId, `✅ ${mode}完了`, "success", false);
+            processedCount++;
+            document.getElementById('count').innerText = processedCount;
+          } else {
+            updateLog(nfcId, `❌ エラー: ${data.message}`, "error", false);
+          }
         }
       })
       .catch(() => updateLog(nfcId, `❌ 通信エラー`, "error", false));
