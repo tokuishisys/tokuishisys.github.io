@@ -142,26 +142,29 @@
       });
     }
 
-    // ★ローカルに保存されたキャッシュからIDを高速検索する関数（通信なし）
+    // ★修正版：キャッシュからIDを検索する関数
     function searchIdInCache(targetId) {
       const cacheStr = localStorage.getItem('nfc_master_cache');
       if (!cacheStr) return null;
       
       const masterList = JSON.parse(cacheStr);
-      // マスタ(配列の配列)のA列(index 0)からIDを探す
+      // A列(index 0)からIDを探す
       const foundRow = masterList.find(row => String(row[0]).trim() === String(targetId).trim());
       
       if (foundRow) {
-        // データの並び順（A:ID, B:袋名, C:配送先, D:品名, E:依頼元, F:区分）
+        // 安全に値を取得し、データがなければ「(未設定)」と表示させる
+        const bagName = foundRow[1] ? String(foundRow[1]).trim() : "名称未設定";
+        const receiver = foundRow[2] ? String(foundRow[2]).trim() : "配送先未設定";
+        const sender = foundRow[4] ? String(foundRow[4]).trim() : "---";
         const kbnText = foundRow[5] ? ` [${String(foundRow[5]).trim()}]` : "";
+
         return {
           success: true,
           isRegistered: true,
           id: foundRow[0],
-          bagName: (foundRow[1] || "") + kbnText,
-          receiver: foundRow[2] || "---",
-          item: foundRow[3] || "---",
-          sender: foundRow[4] || "---"
+          bagName: bagName + kbnText,
+          receiver: receiver,
+          sender: sender
         };
       }
       return null;
@@ -336,12 +339,24 @@
       }
     }
 
+    // ★修正版：ログエリアに要素を追加する関数
     function addLog(id, msg, type) {
       const logArea = document.getElementById('logArea');
       const div = document.createElement('div');
-      div.id = "log-" + id.replace(/[^a-zA-Z0-9]/g, '');
+      const safeId = id.replace(/[^a-zA-Z0-9]/g, '');
+      div.id = "log-" + safeId;
       div.className = `log-entry ${type}`;
-      div.innerHTML = `<strong>ID: ${id}</strong><div class="result-text" style="color:#666; margin-top:4px; font-size:0.9rem;">${msg}</div>`;
+      
+      // スタイルを微調整し、文字がはみ出さないように改行と余白を確保
+      div.style.minHeight = "70px"; 
+      div.style.padding = "10px";
+      
+      div.innerHTML = `
+        <strong style="font-size:0.85rem; color:#333;">🆔 ID: ${id}</strong>
+        <div class="result-text" style="color:#222; margin-top:4px; font-size:0.9rem; line-height:1.5; font-weight:500;">
+          ${msg}
+        </div>
+      `;
       logArea.prepend(div);
     }
   </script>
