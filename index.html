@@ -7,37 +7,26 @@
   <style>
     body { background-color: #f0f2f5; font-family: -apple-system, sans-serif; padding: 15px; margin: 0; }
     .card { background: #fff; padding: 20px; border-radius: 12px; max-width: 500px; margin: 0 auto; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-align: center; }
-    .fw-bold { font-weight: bold; }
-    .text-primary { color: #0d6efd; }
-    .mb-3 { margin-bottom: 1rem; }
+    .fw-bold { font-weight: bold; } .text-primary { color: #0d6efd; } .mb-3 { margin-bottom: 1rem; }
     .btn { display: block; border: none; border-radius: 8px; padding: 18px; font-size: 1.2rem; font-weight: bold; cursor: pointer; color: white; margin-bottom: 15px; width: 100%; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-    .btn-primary { background-color: #0d6efd; }
-    .btn-danger { background-color: #dc3545; }
-    .btn-success { background-color: #198754; }
+    .btn-primary { background-color: #0d6efd; } .btn-danger { background-color: #dc3545; } .btn-success { background-color: #198754; }
     .form-control, .form-select { width: 100%; padding: 14px; font-size: 1.1rem; border-radius: 8px; border: 2px solid #ccc; margin-bottom: 15px; box-sizing: border-box; }
     .form-select { border-color: #0d6efd; background-color: #f8f9fa; }
     .log-area { border: 1px solid #dee2e6; background-color: #f8f9fa; padding: 10px; border-radius: 8px; overflow-y: auto; }
     .log-entry { font-size: 0.9rem; margin-bottom: 8px; padding: 12px; border-radius: 8px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-left: 4px solid #ccc; text-align: left; }
-    .log-entry.success { border-left-color: #198754; }
-    .log-entry.error { border-left-color: #dc3545; }
-    .log-entry.info { border-left-color: #0d6efd; }
+    .log-entry.success { border-left-color: #198754; } .log-entry.error { border-left-color: #dc3545; }
     .d-flex { display: flex; justify-content: space-between; align-items: center; }
     .badge { background: #198754; color: white; padding: 4px 10px; border-radius: 4px; font-size: 0.9rem; }
     .status-box { text-align: center; padding: 15px; border-radius: 8px; background-color: #e7f1ff; border: 1px solid #b6d4fe; color: #084298; font-weight: bold; margin-bottom: 15px; }
     .input-label { text-align: left; margin-bottom: 5px; color: #555; font-size: 0.9rem; font-weight: bold; }
-    .highlight-text { color: #0d6efd; font-weight: bold; }
-
-    /* ★ 追加：スキャンリスト用のスタイル */
     .scan-item { display: flex; justify-content: space-between; align-items: center; padding: 12px; background: #fff; border: 1px solid #ccc; border-radius: 8px; margin-bottom: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
     .scan-item-info { text-align: left; font-size: 0.9rem; }
     .scan-item-remove { color: #dc3545; background: #ffebee; border: none; font-size: 1.2rem; font-weight: bold; cursor: pointer; border-radius: 50%; width: 35px; height: 35px; display: flex; justify-content: center; align-items: center; }
   </style>
 </head>
 <body>
-
   <div class="card">
     <h3 class="fw-bold text-primary mb-3">📱 NFC集配システム</h3>
-    
     <div class="input-label">👤 担当スタッフ名</div>
     <input type="text" id="staffName" class="form-control" placeholder="例：山田 太郎">
 
@@ -45,127 +34,61 @@
     <select id="processMode" class="form-select">
       <option value="登録">🆕 新規登録（集荷）</option>
       <option value="受付" selected>📥 センター受付</option>
-      <option value="配送">🏁 配送完了</option>
+      <option value="配送中">🚚 配送中（ルート出発）</option>
+      <option value="完了">🏁 完了（現地着）</option>
+      <option value="帰着済">🏢 帰着・検収済</option>
+      <option value="院内完了">🏥 院内完了</option>
       <option value="check">🔍 ID確認（紐付けマスタ用）</option>
     </select>
 
     <div id="routeArea">
-      <div class="input-label">🚚 参照便（ルート自動選定用）</div>
-      <select id="routeSlot" class="form-select" style="border-color: #ffc107; background-color: #fffdf5;">
-        <option value="">読込中...</option>
-      </select>
+      <div class="input-label">🚚 参照便（受付・配送中用）</div>
+      <select id="routeSlot" class="form-select" style="border-color: #ffc107; background-color: #fffdf5;"><option value="">読込中...</option></select>
     </div>
 
     <button id="startBtn" onclick="initAndStartNfc()" class="btn btn-primary mt-2">▶️ NFCスキャンを開始</button>
     <button id="stopBtn" onclick="stopNfcScan()" class="btn btn-danger mt-2" style="display:none;">⏹️ スキャンを停止</button>
-
-    <div id="statusArea" class="status-box" style="display:none;">
-      タグを連続でかざしてください...
-    </div>
-
-    <button id="submitBtn" onclick="submitScannedItems()" class="btn btn-success mt-3" style="display:none;">📤 スキャンデータを確定して送信</button>
+    <div id="statusArea" class="status-box" style="display:none;">タグを連続でかざしてください...</div>
+    <button id="submitBtn" onclick="submitScannedItems()" class="btn btn-success mt-3" style="display:none;">📤 データを確定して送信</button>
 
     <div id="scanListContainer" style="display:none; margin-top:15px;">
-      <div class="d-flex mb-2">
-        <span class="fw-bold" style="color:#dc3545;">ストック中（未送信）</span>
-        <span class="badge" style="background:#dc3545;"><span id="scanCount">0</span>件</span>
-      </div>
-      <div id="scanListArea" class="log-area" style="height: 180px; border-color: #dc3545; background-color: #fff5f5;">
-        </div>
+      <div class="d-flex mb-2"><span class="fw-bold" style="color:#dc3545;">ストック中</span><span class="badge" style="background:#dc3545;"><span id="scanCount">0</span>件</span></div>
+      <div id="scanListArea" class="log-area" style="height: 180px; border-color: #dc3545; background-color: #fff5f5;"></div>
     </div>
-
-    <div class="d-flex mb-2 mt-4">
-      <span class="fw-bold" style="color:#555;">送信結果ログ</span>
-      <span class="badge"><span id="count">0</span>件 完了</span>
-    </div>
-    <div id="logArea" class="log-area" style="height: 250px;">
-      <div id="emptyLog" style="color:#999; font-size:0.9rem; padding-top:40px; text-align:center;">送信結果がここに追加されます</div>
-    </div>
+    <div class="d-flex mb-2 mt-4"><span class="fw-bold" style="color:#555;">送信結果ログ</span><span class="badge"><span id="count">0</span>件 完了</span></div>
+    <div id="logArea" class="log-area" style="height: 250px;"><div id="emptyLog" style="color:#999; font-size:0.9rem; padding-top:40px; text-align:center;">送信結果がここに追加されます</div></div>
   </div>
 
   <script>
     const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzCuPCFtd2i0oPjMOzKcYLjMGWLVxT9sVatuRlaJ2PgIPbSd2Xtw1k6PJGGvb5qTfb8TQ/exec";
+    let ndef = null, scanAbortController = null, processedCount = 0, scannedItems = [];
 
-    let ndef = null;
-    let scanAbortController = null;
-    let processedCount = 0;
-    let scannedItems = [];
-
-    // 画面起動時にスタッフ名復元と、参照便（ルート）の取得
     window.addEventListener('DOMContentLoaded', () => {
       const savedStaff = localStorage.getItem('nfc_staff_name');
       if (savedStaff) document.getElementById('staffName').value = savedStaff;
-
       document.getElementById('processMode').addEventListener('change', (e) => {
-        document.getElementById('routeArea').style.display = (e.target.value === "受付") ? "block" : "none";
+        document.getElementById('routeArea').style.display = (e.target.value === "受付" || e.target.value === "配送中") ? "block" : "none";
       });
-
-      // 参照便リストの取得
-      fetch(GAS_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain" },
-        body: JSON.stringify({ action: "getSettings" })
-      })
-      .then(res => res.json())
-      .then(data => {
+      fetch(GAS_API_URL, { method: "POST", body: JSON.stringify({ action: "getSettings" }) })
+      .then(res => res.json()).then(data => {
         if (data.success && data.routeHeaders) {
-          const select = document.getElementById('routeSlot');
-          select.innerHTML = "";
-          data.routeHeaders.forEach(h => {
-            if (h) select.innerHTML += `<option value="${h}">${h}</option>`;
-          });
+          const select = document.getElementById('routeSlot'); select.innerHTML = "";
+          data.routeHeaders.forEach(h => { if (h) select.innerHTML += `<option value="${h}">${h}</option>`; });
         }
-      }).catch(err => console.log("設定取得エラー", err));
-
-      // ★画面を開いたときに最新のマスタデータを一括取得してスマホにキャッシュする
+      });
       syncMasterDataCache();
     });
 
-    // ★GASからマスタを丸ごと一括取得してローカルに保存する関数
     function syncMasterDataCache() {
-      // GAS側にすべての紐付けデータを一括要求する
-      fetch(GAS_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain" },
-        body: JSON.stringify({ action: "getAllNfcMaster" }) // 後述のGAS側追加アクション
-      })
-      .then(res => res.json())
-      .then(data => {
-        if (data.success && data.master) {
-          // ブラウザに「nfc_master_cache」という名前でデータを保存（文字列化）
-          localStorage.setItem('nfc_master_cache', JSON.stringify(data.master));
-          console.log("マスタデータのローカルキャッシュを更新しました。件数:", data.master.length);
-        }
-      })
-      .catch(err => {
-        console.log("マスタの事前取得に失敗しました。電波がない場合は既存のキャッシュを利用します。", err);
-      });
+      fetch(GAS_API_URL, { method: "POST", body: JSON.stringify({ action: "getAllNfcMaster" }) })
+      .then(res => res.json()).then(data => { if (data.success && data.master) localStorage.setItem('nfc_master_cache', JSON.stringify(data.master)); });
     }
 
-    // ★修正版：キャッシュからIDを検索する関数
     function searchIdInCache(targetId) {
-      const cacheStr = localStorage.getItem('nfc_master_cache');
-      if (!cacheStr) return null;
-      
-      const masterList = JSON.parse(cacheStr);
-      // A列(index 0)からIDを探す
-      const foundRow = masterList.find(row => String(row[0]).trim() === String(targetId).trim());
-      
+      const cacheStr = localStorage.getItem('nfc_master_cache'); if (!cacheStr) return null;
+      const foundRow = JSON.parse(cacheStr).find(row => String(row[0]).trim() === String(targetId).trim());
       if (foundRow) {
-        // 安全に値を取得し、データがなければ「(未設定)」と表示させる
-        const bagName = foundRow[1] ? String(foundRow[1]).trim() : "名称未設定";
-        const receiver = foundRow[2] ? String(foundRow[2]).trim() : "配送先未設定";
-        const sender = foundRow[4] ? String(foundRow[4]).trim() : "---";
-        const kbnText = foundRow[5] ? ` [${String(foundRow[5]).trim()}]` : "";
-
-        return {
-          success: true,
-          isRegistered: true,
-          id: foundRow[0],
-          bagName: bagName + kbnText,
-          receiver: receiver,
-          sender: sender
-        };
+        return { success: true, isRegistered: true, id: foundRow[0], bagName: (foundRow[1]||"未設定")+(foundRow[5]?` [${foundRow[5]}]`:""), receiver: foundRow[2]||"---", sender: foundRow[4]||"---" };
       }
       return null;
     }
@@ -174,112 +97,55 @@
       const staffName = document.getElementById('staffName').value.trim();
       if (!staffName) { alert("担当スタッフ名を入力してください！"); return; }
       localStorage.setItem('nfc_staff_name', staffName);
-
       if (!('NDEFReader' in window)) { alert("❌ NFC機能が起動できません。"); return; }
-
       try {
-        ndef = new NDEFReader();
-        scanAbortController = new AbortController();
+        ndef = new NDEFReader(); scanAbortController = new AbortController();
         await ndef.scan({ signal: scanAbortController.signal });
+        document.getElementById('startBtn').style.display = 'none'; document.getElementById('stopBtn').style.display = 'block';
+        document.getElementById('statusArea').style.display = 'block'; document.getElementById('processMode').disabled = true;
         
-        document.getElementById('startBtn').style.display = 'none';
-        document.getElementById('stopBtn').style.display = 'block';
-        document.getElementById('statusArea').style.display = 'block';
-        document.getElementById('processMode').disabled = true;
-        document.getElementById('staffName').disabled = true;
-        document.getElementById('routeSlot').disabled = true;
-        
-        // ★ NFC読み取り時の処理（完全通信なし・爆速化）
         ndef.onreading = async event => {
           if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-          
-          const serialNumber = event.serialNumber;
-          const currentMode = document.getElementById('processMode').value;
-          
-          if (scannedItems.some(item => item.id === serialNumber)) {
-            alert("⚠️ 既に読み込み済みです。");
-            return;
-          }
-
-          // ★通信せず、スマホ内のキャッシュからデータを1瞬で探す
+          const serialNumber = event.serialNumber; const currentMode = document.getElementById('processMode').value;
+          if (scannedItems.some(item => item.id === serialNumber)) { alert("⚠️ 既に読み込み済みです。"); return; }
           const localData = searchIdInCache(serialNumber);
-
-          // ID確認モード（紐付けチェック）の場合はストックせずその場でログに出す
           if (currentMode === "check") {
             document.getElementById('emptyLog').style.display = 'none';
-            if (localData) {
-              updateLog(serialNumber, `✅ 登録済: 【${localData.bagName}】<br>送: ${localData.sender} ➔ 受: ${localData.receiver}`, "success", true);
-            } else {
-              updateLog(serialNumber, `⚠️ 未登録<br>このIDをマスタに登録してください。`, "error", true);
-            }
+            if (localData) updateLog(serialNumber, `✅ 登録済: 【${localData.bagName}】<br>送: ${localData.sender} ➔ 受: ${localData.receiver}`, "success", true);
+            else updateLog(serialNumber, `⚠️ 未登録<br>このIDをマスタに登録してください。`, "error", true);
             return;
           }
-
-          // 通常の処理（登録、受付、配送）はストックリストに追加
-          scannedItems.push({
-            id: serialNumber,
-            mode: currentMode,
-            staff: document.getElementById('staffName').value,
-            slot: document.getElementById('routeSlot').value,
-            info: localData ? localData : { bagName: "未登録", receiver: "---" }
-          });
+          scannedItems.push({ id: serialNumber, mode: currentMode, staff: staffName, slot: document.getElementById('routeSlot').value, info: localData ? localData : { bagName: "未登録", receiver: "---" } });
           renderScanList();
         };
       } catch (error) { alert("NFCの起動に失敗しました: " + error); }
     }
 
     function stopNfcScan() {
-      if (scanAbortController) scanAbortController.abort(); 
-      document.getElementById('startBtn').style.display = 'block';
-      document.getElementById('stopBtn').style.display = 'none';
-      document.getElementById('statusArea').style.display = 'none';
-      document.getElementById('processMode').disabled = false;
-      document.getElementById('staffName').disabled = false;
-      document.getElementById('routeSlot').disabled = false;
+      if (scanAbortController) scanAbortController.abort();
+      document.getElementById('startBtn').style.display = 'block'; document.getElementById('stopBtn').style.display = 'none';
+      document.getElementById('statusArea').style.display = 'none'; document.getElementById('processMode').disabled = false;
     }
 
     function renderScanList() {
-      const container = document.getElementById('scanListContainer');
-      const area = document.getElementById('scanListArea');
-      area.innerHTML = "";
-      if (scannedItems.length === 0) {
-        container.style.display = "none";
-        document.getElementById('submitBtn').style.display = "none";
-        return;
-      }
-      container.style.display = "block";
-      document.getElementById('submitBtn').style.display = "block";
-      document.getElementById('scanCount').innerText = scannedItems.length;
-      
+      const area = document.getElementById('scanListArea'); area.innerHTML = "";
+      if (scannedItems.length === 0) { document.getElementById('scanListContainer').style.display = "none"; document.getElementById('submitBtn').style.display = "none"; return; }
+      document.getElementById('scanListContainer').style.display = "block"; document.getElementById('submitBtn').style.display = "block"; document.getElementById('scanCount').innerText = scannedItems.length;
       scannedItems.forEach((item, index) => {
-        const div = document.createElement('div');
-        div.className = "scan-item";
-        div.innerHTML = `
-          <div class="scan-item-info">
-            <strong>${item.info.bagName}</strong><br>
-            <span style="font-size:0.8rem;">先: ${item.info.receiver || '---'} | ID: ${item.id}</span><br>
-            <span style="color:#0d6efd;">処理: ${item.mode}</span>
-          </div>
-          <button class="scan-item-remove" onclick="removeScannedItem(${index})">✖</button>
-        `;
+        const div = document.createElement('div'); div.className = "scan-item";
+        div.innerHTML = `<div class="scan-item-info"><strong>${item.info.bagName}</strong><br><span style="font-size:0.8rem;">先: ${item.info.receiver || '---'} | ID: ${item.id}</span><br><span style="color:#0d6efd;">処理: ${item.mode}</span></div>
+          <button class="scan-item-remove" onclick="removeScannedItem(${index})">✖</button>`;
         area.prepend(div);
       });
     }
-
-    function removeScannedItem(index) {
-      scannedItems.splice(index, 1);
-      renderScanList();
-    }
+    function removeScannedItem(index) { scannedItems.splice(index, 1); renderScanList(); }
 
     async function submitScannedItems() {
       if (scannedItems.length === 0) return;
-      document.getElementById('submitBtn').disabled = true;
-      document.getElementById('emptyLog').style.display = 'none';
-      
+      document.getElementById('submitBtn').disabled = true; document.getElementById('emptyLog').style.display = 'none';
       let itemsToProcess = [...scannedItems];
       for (let item of itemsToProcess) {
         let actionType = (item.mode === "登録") ? "registerNfc" : "updateStatus";
-        // 送信は実際にサーバー（GAS）へ通信を行う
         await sendSingleRequest(actionType, item);
       }
       document.getElementById('submitBtn').disabled = false;
@@ -287,77 +153,27 @@
 
     function sendSingleRequest(actionType, item) {
       return new Promise((resolve) => {
-        const payload = { action: actionType, id: item.id, status: item.mode, staff: item.staff, slot: item.slot };
-        fetch(GAS_API_URL, {
-          method: "POST",
-          headers: { "Content-Type": "text/plain" },
-          body: JSON.stringify(payload)
-        })
-        .then(res => res.json())
-        .then(data => {
+        fetch(GAS_API_URL, { method: "POST", body: JSON.stringify({ action: actionType, id: item.id, status: item.mode, staff: item.staff, slot: item.slot }) })
+        .then(res => res.json()).then(data => {
           if (data.success) {
             scannedItems = scannedItems.filter(i => i.id !== item.id);
             let resultMsg = `✅ ${item.mode}完了<br>🏥 配送先: ${data.receiver || '---'}<br>🚚 袋情報: ${data.bagName || '---'}`;
             if (data.routeMemo) resultMsg += `<br>⚠️ 備考: ${data.routeMemo}`;
             updateLog(item.id, resultMsg, "success", false);
-            processedCount++;
-            document.getElementById('count').innerText = processedCount;
-          } else {
-            updateLog(item.id, `❌ エラー: ${data.message || '不明'}<br>ID: ${item.id}`, "error", true);
-          }
-          renderScanList();
-          resolve();
-        }).catch(() => {
-          updateLog(item.id, `❌ 通信エラー<br>ID: ${item.id}`, "error", true);
-          resolve();
-        });
+            processedCount++; document.getElementById('count').innerText = processedCount;
+          } else { updateLog(item.id, `❌ エラー: ${data.message || '不明'}<br>ID: ${item.id}`, "error", true); }
+          renderScanList(); resolve();
+        }).catch(() => { updateLog(item.id, `❌ 通信エラー<br>ID: ${item.id}`, "error", true); resolve(); });
       });
     }
 
     function updateLog(id, msg, type, showCopyBtn) {
-      const safeId = id.replace(/[^a-zA-Z0-9]/g, '');
-      let logEl = document.getElementById("log-" + safeId);
+      const safeId = id.replace(/[^a-zA-Z0-9]/g, ''); let logEl = document.getElementById("log-" + safeId);
       if (!logEl) {
-        addLog(id, msg, type);
-        logEl = document.getElementById("log-" + safeId);
-      }
-      logEl.className = `log-entry ${type}`;
-      logEl.querySelector('.result-text').innerHTML = msg;
-      
-      if (showCopyBtn && !logEl.querySelector('.copy-btn')) {
-        const btn = document.createElement('button');
-        btn.className = "copy-btn";
-        btn.style.cssText = "margin-top:8px; padding:4px 12px; background:#0d6efd; color:white; border:none; border-radius:4px; font-size:0.8rem; cursor:pointer;";
-        btn.innerText = "IDをコピー";
-        btn.onclick = () => {
-          navigator.clipboard.writeText(id).then(() => {
-            btn.innerText = "コピー完了！";
-            btn.style.background = "#198754";
-          });
-        };
-        logEl.appendChild(btn);
-      }
-    }
-
-    // ★修正版：ログエリアに要素を追加する関数
-    function addLog(id, msg, type) {
-      const logArea = document.getElementById('logArea');
-      const div = document.createElement('div');
-      const safeId = id.replace(/[^a-zA-Z0-9]/g, '');
-      div.id = "log-" + safeId;
-      div.className = `log-entry ${type}`;
-      
-      // スタイルを微調整し、文字がはみ出さないように改行と余白を確保
-      div.style.minHeight = "70px"; 
-      div.style.padding = "10px";
-      
-      div.innerHTML = `
-        <strong style="font-size:0.85rem; color:#333;">🆔 ID: ${id}</strong>
-        <div class="result-text" style="color:#222; margin-top:4px; font-size:0.9rem; line-height:1.5; font-weight:500;">
-          ${msg}
-        </div>
-      `;
-      logArea.prepend(div);
+        const div = document.createElement('div'); div.id = "log-" + safeId; div.className = `log-entry ${type}`; div.style.minHeight = "70px"; div.style.padding = "10px";
+        div.innerHTML = `<strong style="font-size:0.85rem; color:#333;">🆔 ID: ${id}</strong><div class="result-text" style="color:#222; margin-top:4px; font-size:0.9rem; line-height:1.5; font-weight:500;">${msg}</div>`;
+        document.getElementById('logArea').prepend(div); logEl = div;
+      } else { logEl.className = `log-entry ${type}`; logEl.querySelector('.result-text').innerHTML = msg; }
     }
   </script>
 </body>
